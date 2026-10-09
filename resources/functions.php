@@ -1,14 +1,12 @@
 <?php
+declare(strict_types=1);
+
 
 use Flames\Collection\Arr;
-use Flames\Framework\Shutdown;
+use Flames\Env\Env;
 use Flames\Async\Async;
 use Flames\Collection\Functions;
-
-function __shutdown__() {
-    Shutdown::onShutdown();
-}
-register_shutdown_function('__shutdown__');
+use Flames\Required;
 
 function Arr(mixed $value = null): Arr {
     if ($value instanceof Arr) {
@@ -18,35 +16,72 @@ function Arr(mixed $value = null): Arr {
     return new \Flames\Collection\Arr($value);
 }
 
-function async(\Closure $delegate): mixed {
-    return \Flames\Async\Async::async($delegate);
+function async(\Closure $delegate, bool $parallel = true): \Flames\Async\Container {
+    return \Flames\Async\Async::async($delegate, $parallel);
 }
 
-function await(\Flames\Async\Service\Task|\Flames\Async\Async\Service\Task ...$tasks): mixed {
+function await(\Flames\Async\Container ...$tasks): mixed {
     return \Flames\Async\Async::await(...$tasks);
+}
+
+define('async', async(...));
+define('await', await(...));
+
+function asleep(float $seconds): void {
+    // When the C extension is loaded, sleep() and usleep() are patched to be
+    // non-blocking inside managed coroutines, so usleep() does the right thing.
+    // In PHP-pure mode this is a regular blocking usleep().
+    usleep((int)($seconds * 1_000_000));
 }
 
 function once(Closure $delegate): mixed {
     return Functions::once($delegate);
 }
 
-function dump() : void
-{
-    ob_start();
-    Dump::$aliases[] = __FUNCTION__;
+function response(mixed $data = null, int $statusCode = 200, ?string $contentType = null): \Flames\Framework\Controller\Response {
+    return new \Flames\Framework\Controller\Response($data, $statusCode, $contentType);
+}
 
-    $params = func_get_args();
-    call_user_func_array(['Flames\Dumpper\Dump', 'dump'], $params);
+if (Env::get('DUMP_ENABLED')) {
+    \Flames\Dumpper\Dump::$editor = 'phpstorm';
+    function dump() : void
+    {
+        ob_start();
+        \Flames\Dumpper\Dump::$aliases[] = __FUNCTION__;
 
-    $buffer = ob_get_contents();
-    ob_end_clean();
+        $params = func_get_args();
+        call_user_func_array(\Flames\Dumpper\Dump::dump(...), $params);
 
-    if (\Flames\Connection\HttpClient::isHttpClient() === true) {
-        $buffer = str_replace('class="_dumpper-parent"', 'class="_dumpper-parent _dumpper-show"', $buffer);
-    }
+        $buffer = ob_get_contents();
+        ob_end_clean();
 
-    $buffer = str_replace('>Flames\Collection\Arr</a>', '>Arr</a>', $buffer);
-    echo $buffer;
+        if ($buffer === '' && $params !== []) {
+            echo '<pre>';
+            echo htmlspecialchars(
+                json_encode($params, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR)
+                    ?: 'dump produced no output',
+                ENT_QUOTES | ENT_SUBSTITUTE,
+                'UTF-8',
+            );
+            echo '</pre>';
+
+            return;
+        }
+
+        if ($buffer === '') {
+            return;
+        }
+
+        $buffer = str_replace('>Flames\Collection\Arr</a>', '>Arr</a>', $buffer);
+        $buffer = str_replace('>Flames\Collection\ArrImmutable</a>', '>ArrImmutable</a>', $buffer);
+        echo $buffer;
 //    @flush();
 //    @ob_flush();
+    }
+}
+else {
+    function dump() : void
+    {
+        var_dump(func_get_args());
+    }
 }

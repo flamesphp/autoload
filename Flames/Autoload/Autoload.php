@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 
 namespace Flames\Autoload;
 
@@ -17,14 +19,6 @@ class Autoload
 
     public static function run(): void
     {
-        require (FLAMES_PATH . 'autoload/resources/functions.php');
-
-        // Verify if event load exists and register]
-        $path = (APP_PATH . 'Server/Event/Load.php');
-        if (file_exists($path) === true) {
-            self::$event = true;
-        }
-
         \spl_autoload_register(function ($name) {
             self::load($name);
         });
@@ -32,6 +26,18 @@ class Autoload
 
     public static function load(string $name): void
     {
+        $legacyOrmClasses = [
+            'Flames\\Model' => ROOT_PATH . 'vendor/flamesphp/orm/Flames/Orm/Model.php',
+            'Flames\\Repository' => ROOT_PATH . 'vendor/flamesphp/orm/Flames/Orm/Repository.php',
+            'Flames\\Database' => ROOT_PATH . 'vendor/flamesphp/orm/Flames/Orm/Database.php',
+        ];
+
+        if (isset($legacyOrmClasses[$name])) {
+            self::requires($legacyOrmClasses[$name]);
+            return;
+        }
+
+        /* Flames\{Package}\* → vendor/flamesphp/{package}/Flames/{Package}/... (e.g. flamesphp/microservice) */
         if (str_starts_with($name, 'Flames\\')) {
             $parts   = explode('\\', $name);
             $package = strtolower($parts[1]);
@@ -43,8 +49,12 @@ class Autoload
         }
 
         elseif (str_starts_with($name, 'App\\')) {
-            $path = (APP_PATH . substr(str_replace('\\', '/', $name), 4) . '.php');
-            self::requires($path);
+            if ($name === \App\App::class) {
+                self::requires(ROOT_PATH . 'vendor/flamesphp/framework/App.php');
+            } else {
+                $path = (APP_PATH . substr(str_replace('\\', '/', $name), 4) . '.php');
+                self::requires($path);
+            }
 
             if (method_exists($name, '__constructStatic') === true) {
                 $parts = explode('\\', $name);
@@ -68,6 +78,10 @@ class Autoload
             }
 
             return;
+        }
+
+        else {
+            self::loadEvent($name);
         }
     }
 }

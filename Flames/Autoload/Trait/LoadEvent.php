@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 
 namespace Flames\Autoload\Trait;
 
@@ -11,7 +13,7 @@ if (file_exists($path) === true) {
      */
     trait LoadEvent
     {
-        protected function loadEvent(string $name)
+        protected static function loadEvent(string $name)
         {
             Event::dispatch('Load', 'onLoad', $name);
         }
@@ -24,7 +26,7 @@ if (file_exists($path) === true) {
      */
     trait LoadEvent
     {
-        protected function loadEvent(string $name) {}
+        protected static function loadEvent(string $name) {}
     }
 }
 
